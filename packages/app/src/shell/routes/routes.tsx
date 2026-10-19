@@ -5,6 +5,7 @@ import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
+import { DesktopProjectCommands } from "@/shell/commands/desktop"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
@@ -100,9 +101,12 @@ function AppLayout(props: ParentProps) {
     <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
       <LayoutProvider>
         <SettingsSurfaceProvider>
-          <ExtensionAttachment>
-            <Shell>{props.children}</Shell>
-          </ExtensionAttachment>
+          <>
+            <DesktopProjectCommands />
+            <ExtensionAttachment>
+              <Shell>{props.children}</Shell>
+            </ExtensionAttachment>
+          </>
         </SettingsSurfaceProvider>
       </LayoutProvider>
     </Show>
