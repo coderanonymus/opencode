@@ -377,15 +377,18 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
                     global.servers.list()[0]
 
-                  const projects = conn ? global.ensureServerCtx(conn).projects : undefined
+                  const ctx = conn ? global.ensureServerCtx(conn) : undefined
+                  const projects = ctx?.projects
+                  const list = projects?.list() ?? []
 
                   const project =
-                    projects?.list().find((item) => item.worktree === selection.directory) ??
-                    projects?.list().find((item) => item.worktree === projects.last()) ??
-                    projects?.list()[0]
+                    list.find((item) => item.worktree === selection.directory) ??
+                    list.find((item) => item.worktree === projects?.last()) ??
+                    list[0]
+                  const directory = project?.worktree ?? ctx?.sync.data.path.home
 
-                  if (conn && project) {
-                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                  if (conn && directory) {
+                    void tabs.newDraft({ server: ServerConnection.key(conn), directory }, "")
 
                     return
                   }
@@ -467,7 +470,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   id: "tab.new",
                   category: "tab",
                   title: language.t("command.session.new"),
-                  keybind: "mod+t,mod+n",
+                  keybind: platform.platform === "web" ? "alt+n" : "mod+t,mod+n",
                   hidden: true,
                   onSelect: openNewTab,
                 },
