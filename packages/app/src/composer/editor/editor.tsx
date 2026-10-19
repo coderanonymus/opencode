@@ -95,6 +95,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const i18n = useI18n()
   const state = props.controller.state
   const view = props.controller.view
+  const coarsePointer = createMediaQuery("(pointer: coarse)")
   let editor: HTMLDivElement | undefined
   let viewport: HTMLDivElement | undefined
   let controlsViewport!: HTMLDivElement
@@ -265,6 +266,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
               }
 
               if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                // Mobile keyboards have no Shift key, so leave plain Enter to insert a newline.
+                if (coarsePointer() && !mod && !event.altKey) return
+
                 event.preventDefault()
 
                 if (event.repeat) return
