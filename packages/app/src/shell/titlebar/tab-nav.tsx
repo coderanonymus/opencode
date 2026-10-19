@@ -3,7 +3,10 @@ import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMutation } from "@tanstack/solid-query"
+import { createMutation, useQueryClient } from "@tanstack/solid-query"
+import { Button } from "@opencode/ui/button"
+import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
@@ -14,6 +17,13 @@ import { displayName } from "@opencode/ui/project-avatar"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode/client/promise"
+import { errorMessage } from "@/shell/layout/helpers"
+import { usePlatform } from "@/runtime/platform/platform"
+import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { sessionTitle } from "@/session/title"
+import { showToast } from "@/shell/notifications/toast"
+import { notifySessionTabsRemoved } from "./session-events"
 import { sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
 import "./tab-nav.css"
@@ -57,6 +67,109 @@ export function TabNavItem(props: {
 
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
+  const dialog = useDialog()
+  const queryClient = useQueryClient()
+  const platform = usePlatform()
+  const [exporting, setExporting] = createSignal(false)
+  const [deleting, setDeleting] = createSignal(false)
+
+  const exportSession = async () => {
+    const session = props.session
+    const ctx = serverCtx()
+
+    if (!session || !ctx || exporting()) return
+    setExporting(true)
+
+    try {
+      const data = await fetchSessionExport({ sessionID: session.id, api: ctx.sdk.api })
+      const filename = sessionExportFilename(data.info)
+
+      if (!(await saveSessionExport(filename, data, platform))) return
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
+      })
+    } catch (cause) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description: cause instanceof Error ? cause.message : language.t("toast.session.export.failed.description"),
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const removeSession = async (session: SessionInfo) => {
+    const ctx = serverCtx()
+    const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
+
+    if (!ctx || !conn) return false
+    const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
+
+    try {
+      await ctx.data.session.remove(session.id)
+      notifySessionTabsRemoved({
+        server: props.server,
+        directory: session.location.directory,
+        sessionIDs: ids,
+      })
+
+      return true
+    } catch (cause) {
+      showToast({
+        title: language.t("session.delete.failed.title"),
+        description: errorMessage(cause, language.t("session.delete.failed.title")),
+      })
+
+      return false
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
+    }
+  }
+
+  const showDelete = () => {
+    const session = props.session
+
+    if (!session || deleting()) return
+    setDeleting(false)
+
+    const confirm = async () => {
+      if (deleting()) return
+      setDeleting(true)
+
+      if (await removeSession(session)) {
+        dialog.close()
+
+        return
+      }
+
+      setDeleting(false)
+    }
+
+    void dialog.show(() => (
+      <Dialog fit>
+        <DialogHeader hideClose>
+          <DialogTitleGroup
+            title={language.t("session.delete.title")}
+            description={language.t("session.delete.confirm", {
+              name: sessionTitle(session.title) ?? language.t("command.session.new"),
+            })}
+          />
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" disabled={deleting()} onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </Button>
+          <Button variant="danger" disabled={deleting()} onClick={confirm}>
+            {language.t("session.delete.button")}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    ))
+  }
 
   const unread = () => !!props.session && !props.active && props.unread
 
@@ -415,6 +528,13 @@ export function TabNavItem(props: {
           <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
           </Menu.Item>
+          <Menu.Item disabled={!props.session || exporting()} onSelect={() => void exportSession()}>
+            {language.t("common.export…")}
+          </Menu.Item>
+          <Menu.Item disabled={!props.session || deleting()} onSelect={showDelete}>
+            {language.t("common.delete…")}
+          </Menu.Item>
+          <Menu.Separator />
           <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>
