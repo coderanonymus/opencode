@@ -72,6 +72,7 @@ export function TabNavItem(props: {
   const platform = usePlatform()
   const [exporting, setExporting] = createSignal(false)
   const [deleting, setDeleting] = createSignal(false)
+  const actionPending = () => rename.isPending || exporting() || deleting()
 
   const exportSession = async () => {
     const session = props.session
@@ -106,7 +107,14 @@ export function TabNavItem(props: {
     const ctx = serverCtx()
     const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
 
-    if (!ctx || !conn) return false
+    if (!ctx || !conn) {
+      showToast({
+        title: language.t("session.delete.failed.title"),
+        description: language.t("common.requestFailed"),
+      })
+
+      return false
+    }
     const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
 
     try {
@@ -133,7 +141,7 @@ export function TabNavItem(props: {
   const showDelete = () => {
     const session = props.session
 
-    if (!session || deleting()) return
+    if (!session || actionPending()) return
     setDeleting(false)
 
     const confirm = async () => {
@@ -525,13 +533,13 @@ export function TabNavItem(props: {
             openRename()
           }}
         >
-          <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
+          <Menu.Item disabled={!props.session || !serverCtx() || actionPending()} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
           </Menu.Item>
-          <Menu.Item disabled={!props.session || exporting()} onSelect={() => void exportSession()}>
+          <Menu.Item disabled={!props.session || !serverCtx() || actionPending()} onSelect={() => void exportSession()}>
             {language.t("common.export…")}
           </Menu.Item>
-          <Menu.Item disabled={!props.session || deleting()} onSelect={showDelete}>
+          <Menu.Item disabled={!props.session || !serverCtx() || actionPending()} onSelect={showDelete}>
             {language.t("common.delete…")}
           </Menu.Item>
           <Menu.Separator />
